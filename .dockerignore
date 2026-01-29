@@ -1,0 +1,5 @@
+__pycache__
+.git
+.ipynb_checkpoints
+notebooks
+mlruns  # We will eventually move this to S3 for AWS
