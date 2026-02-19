@@ -1,40 +1,35 @@
 import mlflow
 import mlflow.sklearn
-from mlflow.models import infer_signature
-from xgboost import XGBRegressor
-from sklearn.ensemble import RandomForestRegressor
+import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import root_mean_squared_error
+from sklearn.ensemble import RandomForestRegressor
 from src.utils.helpers import load_and_clean_data
+from src.stages.data_collector import collect_training_data_from_api
+import os
 
-def run_train():
-    mlflow.set_experiment("Restaurant_Satisfaction_Comparison")
+def run_evolving_train():
+    mlflow.set_experiment("PanikPlan_Evolving_Brain")
+
+    api_csv = collect_training_data_from_api()
+
+    X_orig, y_orig = load_and_clean_data("data/raw/TA_restaurants_curated.csv")
+
+    df_api = pd.read_csv(api_csv)
+
+    X_api = df_api[['price_score', 'number_of_reviews', 'is_unknown']]
+    y_api = df_api['rating']
     
-    X, y = load_and_clean_data("data/raw/TA_restaurants_curated.csv")
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_final = pd.concat([X_orig, X_api]).fillna(0)
+    y_final = pd.concat([y_orig, y_api])
 
-    # List of models to try
-    models = [
-        {"name": "XGBoost", "model": XGBRegressor(n_estimators=100, max_depth=5)},
-        {"name": "RandomForest", "model": RandomForestRegressor(n_estimators=100, max_depth=8)}
-    ]
+    X_train, X_test, y_train, y_test = train_test_split(X_final, y_final, test_size=0.2)
 
-    for m_info in models:
-        with mlflow.start_run(run_name=m_info["name"]):
-            model = m_info["model"]
-            model.fit(X_train, y_train)
-            
-            preds = model.predict(X_test)
-            rmse = root_mean_squared_error(y_test, preds)
-            
-            # Log params, metrics, and signature
-            mlflow.log_params(model.get_params() if hasattr(model, 'get_params') else {})
-            mlflow.log_metric("rmse", rmse)
-            
-            signature = infer_signature(X_test, preds)
-            mlflow.sklearn.log_model(model, m_info["name"].lower() + "_model", signature=signature)
-            
-            print(f"{m_info['name']} trained with RMSE: {rmse:.4f}")
+    with mlflow.start_run(run_name="Evolving_RandomForest"):
+        model = RandomForestRegressor(n_estimators=100, max_depth=10)
+        model.fit(X_train, y_train)
+
+        mlflow.sklearn.log_model(model, "randomforest_model")
+        print(f"Brain updated! Now trained on {len(X_final)} rows.")
 
 if __name__ == "__main__":
-    run_train()
+    run_evolving_train()
